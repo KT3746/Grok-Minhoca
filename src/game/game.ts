@@ -246,7 +246,7 @@ export class MinhocaGame {
     await Promise.all(
       files.map(async (f) => {
         try {
-          this.imgs[f] = await loadImage(`/game/${f}`);
+          this.imgs[f] = await loadImage(`${import.meta.env.BASE_URL}game/${f}`);
         } catch {
           this.imgs[f] = null;
         }

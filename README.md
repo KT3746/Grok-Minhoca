@@ -4,6 +4,10 @@ Jogo de navegador estilo artilharia por turnos: dois pelotões, terra que some e
 
 Não é Worms. É MINHOCA.
 
+**Jogar:** [kt3746.github.io/Grok-Minhoca](https://kt3746.github.io/Grok-Minhoca/)
+
+Feito com Grok Build.
+
 ## Como abrir
 
 ```bash
