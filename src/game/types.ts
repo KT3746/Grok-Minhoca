@@ -120,6 +120,7 @@ export type UiSnap = {
   winner: Team | null;
   muted: boolean;
   touch: boolean;
+  wide: boolean;
   hpA: number[];
   hpB: number[];
   namesA: string[];

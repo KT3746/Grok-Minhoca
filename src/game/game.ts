@@ -1475,17 +1475,25 @@ export class MinhocaGame {
   private minZoom() {
     const zW = this.cssW / WORLD_W;
     const zH = this.cssH / WORLD_H;
-    return Math.max(0.16, Math.min(zW, zH) * 0.96);
+    return Math.max(0.18, Math.min(zW, zH) * 0.96);
   }
 
   private maxZoom() {
-    return this.touch ? 1.25 : 1.7;
+    return this.touch ? 1.45 : 1.7;
+  }
+
+  private landscape() {
+    return this.cssW > this.cssH * 1.15;
   }
 
   private defaultZoom() {
     if (!this.touch) return 0.92;
-    const play = this.cssW / 1600;
-    return clamp(play, this.minZoom() * 1.04, 0.48);
+    if (this.landscape()) return clamp(this.cssH / 420, 0.82, 1.22);
+    return clamp(this.cssW / 860, 0.62, 0.95);
+  }
+
+  private wormDraw() {
+    return Math.max(WORM_DRAW * 1.2, 52 / this.zoom);
   }
 
   bumpZoom(dir: number) {
@@ -1509,7 +1517,7 @@ export class MinhocaGame {
 
   private lookAt(x: number, y: number) {
     this.camTX = x - this.viewW() / 2;
-    this.camTY = y - this.viewH() * (this.touch ? 0.36 : 0.58);
+    this.camTY = y - this.viewH() * (this.landscape() ? 0.52 : this.touch ? 0.4 : 0.58);
   }
 
   private clampCam() {
@@ -1640,8 +1648,8 @@ export class MinhocaGame {
       if (w.dead) {
         if (!w.grounded && w.y < WATER_Y - 4) {
           const sheet = this.sheets[w.team].hurt ?? this.sheets[w.team].idle;
-          const dw = WORM_DRAW;
-          const dh = WORM_DRAW;
+          const dw = this.wormDraw();
+          const dh = dw;
           const dx = w.x - dw / 2;
           const dy = w.y - dh + 4;
           ctx.save();
@@ -1664,10 +1672,21 @@ export class MinhocaGame {
         w.anim === "hurt"
           ? Math.min(3, ((0.35 - Math.max(0, w.hurtT)) * 10) | 0)
           : (w.animT * (w.anim === "walk" ? 8 : 4)) % 4 | 0;
-      const dw = WORM_DRAW;
-      const dh = WORM_DRAW;
+      const dw = this.wormDraw();
+      const dh = dw;
       const dx = w.x - dw / 2;
       const dy = w.y - dh + 4;
+      ctx.save();
+      ctx.fillStyle = "rgba(11,13,16,0.4)";
+      ctx.beginPath();
+      ctx.ellipse(w.x, w.y - 2, dw * 0.3, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = w.team === 0 ? "#c5d4a4" : "#e0a0a0";
+      ctx.lineWidth = Math.max(2.2, 3.2 / this.zoom);
+      ctx.beginPath();
+      ctx.ellipse(w.x, w.y - dh * 0.38, dw * 0.26, dh * 0.34, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
       if (sheet) blit(ctx, sheet, frame, dx, dy, dw, dh, w.face === -1);
       else {
         ctx.fillStyle = w.team === 0 ? "#6b7c4a" : "#9a3b3b";
@@ -1688,7 +1707,7 @@ export class MinhocaGame {
         const gun = this.imgs["bazooka.png"];
         const ang = this.fireAngle(w);
         ctx.save();
-        ctx.translate(w.x + w.face * 6, w.y - 16);
+        ctx.translate(w.x + w.face * (dw * 0.12), w.y - dh * 0.32);
         ctx.rotate(ang);
         if (gun) ctx.drawImage(gun, 0, -10, 34, 20);
         else {
@@ -1698,24 +1717,28 @@ export class MinhocaGame {
         ctx.restore();
       }
       const teamCol = w.team === 0 ? "#8b9a6a" : "#c45c5c";
-      const s = clamp(1 / this.zoom, 1, 2.5);
-      ctx.font = `600 ${11 * s}px Outfit, sans-serif`;
+      const s = clamp(1 / this.zoom, 1, 2.2);
+      const fs = 12 * s;
+      ctx.font = `700 ${fs}px Outfit, sans-serif`;
       ctx.textAlign = "center";
-      ctx.fillStyle = "rgba(11,13,16,0.55)";
-      ctx.fillText(w.name, w.x + 1, w.y - dh + 1);
+      const tw = ctx.measureText(w.name).width;
+      const nx = w.x;
+      const ny = w.y - dh - 6 * s;
+      ctx.fillStyle = "rgba(11,13,16,0.78)";
+      ctx.fillRect(nx - tw / 2 - 5 * s, ny - fs, tw + 10 * s, fs + 6 * s);
       ctx.fillStyle = "#ece6d8";
-      ctx.fillText(w.name, w.x, w.y - dh);
-      ctx.fillStyle = "rgba(11,13,16,0.7)";
-      ctx.fillRect(w.x - 16 * s, w.y - dh - 8 * s, 32 * s, 4 * s);
+      ctx.fillText(w.name, nx, ny);
+      ctx.fillStyle = "rgba(11,13,16,0.75)";
+      ctx.fillRect(w.x - 18 * s, ny - fs - 7 * s, 36 * s, 4 * s);
       ctx.fillStyle = teamCol;
-      ctx.fillRect(w.x - 16 * s, w.y - dh - 8 * s, 32 * s * (w.hp / 100), 4 * s);
+      ctx.fillRect(w.x - 18 * s, ny - fs - 7 * s, 36 * s * (w.hp / 100), 4 * s);
       if (w === this.active() && this.screen === "play") {
-        const pulse = 0.6 + Math.sin(this.time * 6) * 0.4;
-        ctx.fillStyle = `rgba(236,230,216,${0.35 + pulse * 0.4})`;
+        const pulse = 0.55 + Math.sin(this.time * 6) * 0.45;
+        ctx.fillStyle = `rgba(236,230,216,${0.45 + pulse * 0.5})`;
         ctx.beginPath();
-        ctx.moveTo(w.x, w.y - dh - 16);
-        ctx.lineTo(w.x - 6, w.y - dh - 26);
-        ctx.lineTo(w.x + 6, w.y - dh - 26);
+        ctx.moveTo(w.x, ny - fs - 12 * s);
+        ctx.lineTo(w.x - 7 * s, ny - fs - 24 * s);
+        ctx.lineTo(w.x + 7 * s, ny - fs - 24 * s);
         ctx.fill();
       }
     }
@@ -1904,7 +1927,7 @@ export class MinhocaGame {
     const ctx = this.ctx;
     const w = Math.min(220, this.cssW - 48);
     const x = (this.cssW - w) / 2;
-    const y = this.cssH - (this.touch ? 138 : 78);
+    const y = this.cssH - (this.landscape() ? 52 : this.touch ? 118 : 78);
     ctx.fillStyle = "rgba(11,13,16,0.55)";
     ctx.fillRect(x, y, w, 10);
     ctx.fillStyle = "#ece6d8";
@@ -1919,8 +1942,9 @@ export class MinhocaGame {
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
     const wasTouch = this.touch;
+    const wasWide = this.landscape();
     this.refreshTouch();
-    if (this.touch !== wasTouch) this.zoom = this.defaultZoom();
+    if (this.touch !== wasTouch || this.landscape() !== wasWide) this.zoom = this.defaultZoom();
     this.zoom = clamp(this.zoom, this.minZoom(), this.maxZoom());
     this.emit(true);
   }
@@ -2180,6 +2204,7 @@ export class MinhocaGame {
       winner: this.winner,
       muted: this.muted,
       touch: this.touch,
+      wide: this.landscape(),
       hpA: this.worms.filter((w) => w.team === 0).map((w) => w.hp),
       hpB: this.worms.filter((w) => w.team === 1).map((w) => w.hp),
       namesA: [...NAMES_A],
@@ -2192,7 +2217,7 @@ export class MinhocaGame {
 
   private emit(force: boolean) {
     const snap = this.snapshot();
-    const key = `${snap.screen}|${snap.phase}|${snap.team}|${snap.weapon}|${snap.timer | 0}|${snap.loading}|${snap.winner}|${snap.hpA}|${snap.hpB}|${snap.charging}`;
+    const key = `${snap.screen}|${snap.phase}|${snap.team}|${snap.weapon}|${snap.timer | 0}|${snap.loading}|${snap.winner}|${snap.hpA}|${snap.hpB}|${snap.charging}|${snap.wide}|${snap.touch}`;
     if (!force && key === this.lastUi) return;
     this.lastUi = key;
     this.onUi(snap);

@@ -33,6 +33,7 @@ const INITIAL: UiSnap = {
   winner: null,
   muted: false,
   touch: false,
+  wide: false,
   hpA: [100, 100, 100, 100],
   hpB: [100, 100, 100, 100],
   namesA: ["Juca", "Chico", "Nando", "Bira"],
@@ -99,8 +100,7 @@ export function MinhocaApp() {
       {playing && !ui.loading && (
         <>
           <TopHud ui={ui} g={g} />
-          <TeamStrip ui={ui} />
-          {ui.touch && <ZoomDock g={g} />}
+          {!ui.wide && <TeamStrip ui={ui} />}
           <WeaponBar ui={ui} g={g} />
           {ui.touch && <TouchPad g={g} ui={ui} />}
           {!ui.touch && (
@@ -273,7 +273,35 @@ function TopHud({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
           {Math.ceil(ui.timer)}
         </p>
       </div>
-      <div className="pointer-events-auto flex gap-2">
+      <div className="pointer-events-auto flex gap-1.5">
+        {ui.touch && (
+          <>
+            <button
+              type="button"
+              onClick={() => g?.bumpZoom(1)}
+              className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
+              aria-label="Aproximar"
+            >
+              <ZoomIn className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => g?.bumpZoom(-1)}
+              className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
+              aria-label="Afastar"
+            >
+              <ZoomOut className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => g?.fitWorld()}
+              className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
+              aria-label="Ver campo"
+            >
+              <Maximize2 className="size-4" />
+            </button>
+          </>
+        )}
         {!ui.touch && (
           <button
             type="button"
@@ -287,7 +315,7 @@ function TopHud({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
         <button
           type="button"
           onClick={() => g?.setMuted(!ui.muted)}
-          className="flex size-11 items-center justify-center rounded-lg bg-ink/70"
+          className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
           aria-label="Som"
         >
           {ui.muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
@@ -295,7 +323,7 @@ function TopHud({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
         <button
           type="button"
           onClick={() => g?.pause()}
-          className="flex size-11 items-center justify-center rounded-lg bg-ink/70"
+          className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
           aria-label="Pausa"
         >
           <Pause className="size-4" />
@@ -307,7 +335,7 @@ function TopHud({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
 
 function TeamStrip({ ui }: { ui: UiSnap }) {
   return (
-    <div className="pointer-events-none absolute top-24 left-3 right-3 z-10 flex justify-between gap-4">
+    <div className="pointer-events-none absolute top-16 left-3 right-3 z-10 flex justify-between gap-4">
       <MiniTeam names={ui.namesA} hp={ui.hpA} accent="bg-olive-2" active={ui.wormName} />
       <MiniTeam names={ui.namesB} hp={ui.hpB} accent="bg-crimson" align="right" active={ui.wormName} />
     </div>
@@ -350,42 +378,16 @@ function MiniTeam({
   );
 }
 
-function ZoomDock({ g }: { g: MinhocaGame | null }) {
-  return (
-    <div className="absolute top-44 left-3 z-10 flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={() => g?.bumpZoom(1)}
-        className="flex size-11 items-center justify-center rounded-lg bg-ink/75"
-        aria-label="Aproximar"
-      >
-        <ZoomIn className="size-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => g?.bumpZoom(-1)}
-        className="flex size-11 items-center justify-center rounded-lg bg-ink/75"
-        aria-label="Afastar"
-      >
-        <ZoomOut className="size-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => g?.fitWorld()}
-        className="flex size-11 items-center justify-center rounded-lg bg-ink/75"
-        aria-label="Ver campo"
-      >
-        <Maximize2 className="size-4" />
-      </button>
-    </div>
-  );
-}
-
 function WeaponBar({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
+  const compact = ui.wide;
   return (
     <div
-      className={`absolute z-10 flex max-w-full gap-1.5 overflow-x-auto px-3 ${
-        ui.touch ? "bottom-36 left-0 right-0 justify-center" : "bottom-10 left-0 right-0 justify-center"
+      className={`absolute z-10 flex max-w-[min(100%,42rem)] gap-1 overflow-x-auto px-2 ${
+        compact
+          ? "top-[4.25rem] left-1/2 -translate-x-1/2 justify-center"
+          : ui.touch
+            ? "bottom-24 left-0 right-0 justify-center"
+            : "bottom-10 left-0 right-0 justify-center"
       }`}
     >
       {WEAPONS.map((w) => {
@@ -399,13 +401,20 @@ function WeaponBar({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
             type="button"
             disabled={empty || !ui.canAct}
             onClick={() => g?.setWeapon(w.id)}
-            className={`flex min-w-12 flex-col items-center rounded-lg px-2.5 py-2 ${
-              on ? "bg-cream text-ink" : "bg-ink/75 text-cream"
-            } ${empty ? "opacity-35" : ""}`}
+            className={`flex items-center justify-center rounded-lg ${
+              compact ? "size-10" : "min-w-12 flex-col px-2 py-1.5"
+            } ${on ? "bg-cream text-ink" : "bg-ink/80 text-cream"} ${empty ? "opacity-35" : ""}`}
+            aria-label={w.label}
           >
             <Icon className="size-4" />
-            <span className="mt-1 text-2xs font-medium uppercase tracking-wide">{w.label}</span>
-            <span className={`text-xs tabular-nums ${on ? "text-ink/70" : "text-muted"}`}>{ammo < 0 ? "∞" : ammo}</span>
+            {!compact && (
+              <>
+                <span className="mt-0.5 text-2xs font-medium uppercase tracking-wide">{w.label}</span>
+                <span className={`text-xs tabular-nums ${on ? "text-ink/70" : "text-muted"}`}>
+                  {ammo < 0 ? "∞" : ammo}
+                </span>
+              </>
+            )}
           </button>
         );
       })}
@@ -414,25 +423,26 @@ function WeaponBar({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
 }
 
 function TouchPad({ g, ui }: { g: MinhocaGame | null; ui: UiSnap }) {
+  const slim = ui.wide;
   return (
-    <div className="absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       <div className="flex gap-2">
         <PadBtn
           label="Esq"
+          slim={slim}
           onDown={() => g?.setWalk(-1)}
           onUp={() => g?.releaseWalk(-1)}
         />
         <PadBtn
           label="Dir"
+          slim={slim}
           onDown={() => g?.setWalk(1)}
           onUp={() => g?.releaseWalk(1)}
         />
       </div>
-      <div className="flex flex-col items-end gap-2">
-        <div className="flex gap-2">
-          <PadBtn label="Pular" onDown={() => g?.jump()} />
-          <PadBtn label="Passar" onDown={() => g?.skipTurn()} />
-        </div>
+      <div className={`flex items-end gap-2 ${slim ? "" : "flex-col"}`}>
+        <PadBtn label="Pular" slim={slim} onDown={() => g?.jump()} />
+        <PadBtn label="Passar" slim={slim} onDown={() => g?.skipTurn()} />
         <button
           type="button"
           onPointerDown={(e) => {
@@ -445,9 +455,11 @@ function TouchPad({ g, ui }: { g: MinhocaGame | null; ui: UiSnap }) {
             g?.releaseFire();
           }}
           onPointerCancel={() => g?.releaseFire()}
-          className={`flex h-20 w-20 items-center justify-center rounded-full border border-border font-display text-2xl tracking-wide ${
-            ui.charging ? "bg-cream text-ink" : "bg-ink-2/90 text-cream"
-          } ${!ui.canAct && !ui.charging ? "opacity-40" : ""}`}
+          className={`flex items-center justify-center rounded-full border border-border font-display tracking-wide ${
+            slim ? "h-14 w-14 text-lg" : "h-16 w-16 text-xl"
+          } ${ui.charging ? "bg-cream text-ink" : "bg-ink-2/90 text-cream"} ${
+            !ui.canAct && !ui.charging ? "opacity-40" : ""
+          }`}
         >
           FOGO
         </button>
@@ -456,7 +468,17 @@ function TouchPad({ g, ui }: { g: MinhocaGame | null; ui: UiSnap }) {
   );
 }
 
-function PadBtn({ label, onDown, onUp }: { label: string; onDown: () => void; onUp?: () => void }) {
+function PadBtn({
+  label,
+  onDown,
+  onUp,
+  slim,
+}: {
+  label: string;
+  onDown: () => void;
+  onUp?: () => void;
+  slim?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -470,7 +492,9 @@ function PadBtn({ label, onDown, onUp }: { label: string; onDown: () => void; on
         onUp?.();
       }}
       onPointerCancel={() => onUp?.()}
-      className="flex h-14 min-w-14 items-center justify-center rounded-xl bg-ink/75 px-3 text-xs font-medium uppercase tracking-wide"
+      className={`flex items-center justify-center rounded-xl bg-ink/80 px-3 text-xs font-medium uppercase tracking-wide ${
+        slim ? "h-12 min-w-12" : "h-14 min-w-14"
+      }`}
     >
       {label}
     </button>
