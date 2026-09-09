@@ -27,7 +27,7 @@ Abra o endereço que aparecer (em geral `http://localhost:8080`).
 - **1–6**: armas (bazuca, granada, dinamite, shotgun, soco, ataque aéreo)
 - **Esc / P**: pausa
 
-No celular, use o pad e o botão FOGO. Arraste no campo para mirar.
+No celular, use o pad e o botão FOGO. Arraste no campo para mirar. Pinça com dois dedos ou use − / + para o zoom; o botão de campo mostra o mapa inteiro.
 
 ## Modos
 

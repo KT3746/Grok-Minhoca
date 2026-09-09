@@ -139,6 +139,10 @@ export class MinhocaGame {
   fireHeld = false;
   pointerWorld: { x: number; y: number } | null = null;
   strikeX: number | null = null;
+  private pointers = new Map<number, { x: number; y: number }>();
+  private pinchDist = 0;
+  private pinchZoom = 1;
+  private pinching = false;
 
   camX = 0;
   camY = 0;
@@ -168,11 +172,10 @@ export class MinhocaGame {
     if (!ctx) throw new Error("2d");
     this.ctx = ctx;
     this.onUi = onUi;
-    this.touch = window.matchMedia("(pointer: coarse)").matches;
-    this.hudFire = this.touch;
+    this.refreshTouch();
     this.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.zoom = this.touch ? 1.12 : 0.92;
+    this.zoom = this.defaultZoom();
     const prefs = readPrefs();
     this.muted = prefs.muted;
     this.difficulty = prefs.difficulty;
@@ -183,6 +186,7 @@ export class MinhocaGame {
   async start() {
     this.bind();
     this.resize();
+    this.zoom = this.defaultZoom();
     this.loading = false;
     this.previewMap();
     this.emit(true);
@@ -296,7 +300,7 @@ export class MinhocaGame {
     this.worms = [];
     this.shots = [];
     this.planes = [];
-    this.zoom = this.touch ? 1.12 : 0.92;
+    this.zoom = this.defaultZoom();
     this.emit(true);
     if (this.loadPromise) await this.loadPromise;
     if (this.destroyed) return;
@@ -456,10 +460,15 @@ export class MinhocaGame {
   private tick(dt: number) {
     this.time += dt;
     if (this.screen === "menu") {
-      this.camTX += 18 * dt;
-      if (this.camTX > WORLD_W - this.viewW() - 20) this.camTX = 40;
-      this.camX = lerp(this.camX, this.camTX, 1 - Math.exp(-1.2 * dt));
-      this.camY = lerp(this.camY, 80, 1 - Math.exp(-1.2 * dt));
+      if (this.viewW() >= WORLD_W - 8) {
+        this.camX = (WORLD_W - this.viewW()) / 2;
+        this.camY = Math.min(80, Math.max(WORLD_H - this.viewH() + 12, -40));
+      } else {
+        this.camTX += 18 * dt;
+        if (this.camTX > WORLD_W - this.viewW() - 20) this.camTX = 40;
+        this.camX = lerp(this.camX, this.camTX, 1 - Math.exp(-1.2 * dt));
+        this.camY = lerp(this.camY, 80, 1 - Math.exp(-1.2 * dt));
+      }
       this.draw();
       return;
     }
@@ -1452,9 +1461,72 @@ export class MinhocaGame {
     return this.cssH / this.zoom;
   }
 
+  private refreshTouch() {
+    const q = new URLSearchParams(location.search);
+    const portrait = window.innerHeight > window.innerWidth * 1.05;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const points = navigator.maxTouchPoints > 0;
+    const narrow = Math.min(window.innerWidth, window.innerHeight) < 820;
+    const mobileUa = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    this.touch = q.get("touch") === "1" || coarse || points || portrait || narrow || mobileUa;
+    this.hudFire = this.touch;
+  }
+
+  private minZoom() {
+    const zW = this.cssW / WORLD_W;
+    const zH = this.cssH / WORLD_H;
+    return Math.max(0.16, Math.min(zW, zH) * 0.96);
+  }
+
+  private maxZoom() {
+    return this.touch ? 1.25 : 1.7;
+  }
+
+  private defaultZoom() {
+    if (!this.touch) return 0.92;
+    const play = this.cssW / 1600;
+    return clamp(play, this.minZoom() * 1.04, 0.48);
+  }
+
+  bumpZoom(dir: number) {
+    this.applyZoom(this.zoom * (dir < 0 ? 0.78 : 1.28), this.cssW / 2, this.cssH * (this.touch ? 0.42 : 0.5));
+  }
+
+  fitWorld() {
+    this.applyZoom(this.minZoom(), this.cssW / 2, this.cssH / 2);
+  }
+
+  private applyZoom(next: number, screenX: number, screenY: number) {
+    const wx = screenX / this.zoom + this.camX;
+    const wy = screenY / this.zoom + this.camY;
+    this.zoom = clamp(next, this.minZoom(), this.maxZoom());
+    this.camX = wx - screenX / this.zoom;
+    this.camY = wy - screenY / this.zoom;
+    this.camTX = this.camX;
+    this.camTY = this.camY;
+    this.clampCam();
+  }
+
   private lookAt(x: number, y: number) {
     this.camTX = x - this.viewW() / 2;
-    this.camTY = y - this.viewH() * 0.64;
+    this.camTY = y - this.viewH() * (this.touch ? 0.36 : 0.58);
+  }
+
+  private clampCam() {
+    const vw = this.viewW();
+    const vh = this.viewH();
+    if (vw >= WORLD_W) {
+      this.camX = this.camTX = (WORLD_W - vw) / 2;
+    } else {
+      this.camX = clamp(this.camX, 0, WORLD_W - vw);
+      this.camTX = clamp(this.camTX, 0, WORLD_W - vw);
+    }
+    if (vh >= WORLD_H) {
+      this.camY = this.camTY = WORLD_H - vh + 12;
+    } else {
+      this.camY = clamp(this.camY, -40, WORLD_H - vh + 40);
+      this.camTY = clamp(this.camTY, -40, WORLD_H - vh + 40);
+    }
   }
 
   private updateCam(dt: number) {
@@ -1463,7 +1535,7 @@ export class MinhocaGame {
       const p = this.planes[0];
       if (s) this.lookAt(s.x, s.y);
       else if (p) this.lookAt(p.x, p.y + 80);
-    } else {
+    } else if (!this.pinching) {
       const w = this.active();
       if (w) {
         const ang = this.fireAngle(w);
@@ -1474,10 +1546,7 @@ export class MinhocaGame {
     const k = 1 - Math.exp(-5.5 * dt);
     this.camX += (this.camTX - this.camX) * k;
     this.camY += (this.camTY - this.camY) * k;
-    const maxX = Math.max(0, WORLD_W - this.viewW());
-    const maxY = Math.max(0, WORLD_H - this.viewH() + 40);
-    this.camX = clamp(this.camX, 0, maxX);
-    this.camY = clamp(this.camY, -20, maxY);
+    this.clampCam();
   }
 
   private draw() {
@@ -1629,16 +1698,17 @@ export class MinhocaGame {
         ctx.restore();
       }
       const teamCol = w.team === 0 ? "#8b9a6a" : "#c45c5c";
-      ctx.font = "600 11px Outfit, sans-serif";
+      const s = clamp(1 / this.zoom, 1, 2.5);
+      ctx.font = `600 ${11 * s}px Outfit, sans-serif`;
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(11,13,16,0.55)";
       ctx.fillText(w.name, w.x + 1, w.y - dh + 1);
       ctx.fillStyle = "#ece6d8";
       ctx.fillText(w.name, w.x, w.y - dh);
       ctx.fillStyle = "rgba(11,13,16,0.7)";
-      ctx.fillRect(w.x - 16, w.y - dh - 8, 32, 4);
+      ctx.fillRect(w.x - 16 * s, w.y - dh - 8 * s, 32 * s, 4 * s);
       ctx.fillStyle = teamCol;
-      ctx.fillRect(w.x - 16, w.y - dh - 8, 32 * (w.hp / 100), 4);
+      ctx.fillRect(w.x - 16 * s, w.y - dh - 8 * s, 32 * s * (w.hp / 100), 4 * s);
       if (w === this.active() && this.screen === "play") {
         const pulse = 0.6 + Math.sin(this.time * 6) * 0.4;
         ctx.fillStyle = `rgba(236,230,216,${0.35 + pulse * 0.4})`;
@@ -1848,6 +1918,11 @@ export class MinhocaGame {
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
+    const wasTouch = this.touch;
+    this.refreshTouch();
+    if (this.touch !== wasTouch) this.zoom = this.defaultZoom();
+    this.zoom = clamp(this.zoom, this.minZoom(), this.maxZoom());
+    this.emit(true);
   }
 
   private bind() {
@@ -1916,6 +1991,18 @@ export class MinhocaGame {
     else if (this.screen === "play") this.pause();
   };
 
+  private pointerSpan() {
+    const pts = [...this.pointers.values()];
+    if (pts.length < 2) return 0;
+    return Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y);
+  }
+
+  private pointerMid() {
+    const pts = [...this.pointers.values()];
+    if (pts.length < 2) return { x: 0, y: 0 };
+    return { x: (pts[0]!.x + pts[1]!.x) / 2, y: (pts[0]!.y + pts[1]!.y) / 2 };
+  }
+
   private toWorld(ev: PointerEvent) {
     const rect = this.canvas.getBoundingClientRect();
     const x = (ev.clientX - rect.left) / this.zoom + this.camX;
@@ -1925,6 +2012,14 @@ export class MinhocaGame {
 
   private onPtrDown = (ev: PointerEvent) => {
     this.sfx.unlock();
+    this.pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (this.pointers.size >= 2) {
+      this.pinching = true;
+      this.pinchDist = this.pointerSpan();
+      this.pinchZoom = this.zoom;
+      this.pointerHeld = false;
+      return;
+    }
     this.pointerWorld = this.toWorld(ev);
     this.pointerAimT = 0.7;
     if (this.hudFire) return;
@@ -1937,11 +2032,23 @@ export class MinhocaGame {
   };
 
   private onPtrMove = (ev: PointerEvent) => {
+    if (this.pointers.has(ev.pointerId)) this.pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (this.pinching && this.pointers.size >= 2) {
+      const d = this.pointerSpan();
+      if (this.pinchDist > 10) {
+        const rect = this.canvas.getBoundingClientRect();
+        const mid = this.pointerMid();
+        this.applyZoom(this.pinchZoom * (d / this.pinchDist), mid.x - rect.left, mid.y - rect.top);
+      }
+      return;
+    }
     this.pointerWorld = this.toWorld(ev);
     this.pointerAimT = 0.7;
   };
 
-  private onPtrUp = () => {
+  private onPtrUp = (ev: PointerEvent) => {
+    this.pointers.delete(ev.pointerId);
+    if (this.pointers.size < 2) this.pinching = false;
     this.pointerHeld = false;
     if (!this.hudFire) this.releaseFire();
     this.fireHeld = false;
@@ -1949,7 +2056,8 @@ export class MinhocaGame {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    this.zoom = clamp(this.zoom * (e.deltaY > 0 ? 0.94 : 1.06), 0.72, 1.7);
+    const rect = this.canvas.getBoundingClientRect();
+    this.applyZoom(this.zoom * (e.deltaY > 0 ? 0.9 : 1.1), e.clientX - rect.left, e.clientY - rect.top);
   };
 
   setWalk(dir: number) {
@@ -2021,12 +2129,10 @@ export class MinhocaGame {
       skip: () => this.skipTurn(),
       jump: () => this.jump(),
       zoomOut: () => {
-        this.zoom = 0.72;
-        this.camX = 0;
-        this.camY = 0;
-        this.camTX = 0;
-        this.camTY = 0;
+        this.fitWorld();
       },
+      bumpZoom: (dir: number) => this.bumpZoom(dir),
+      getZoom: () => this.zoom,
       dump: () => ({
         screen: this.screen,
         phase: this.phase,
@@ -2035,6 +2141,7 @@ export class MinhocaGame {
         map: this.terrain.kind,
         timer: +this.timer.toFixed(1),
         wind: +this.wind.toFixed(2),
+        zoom: +this.zoom.toFixed(3),
         ai: this.ai.on ? this.ai.stage : "off",
         shots: this.shots.length,
         planes: this.planes.map((p) => ({ x: p.x | 0, dropped: p.dropped, n: p.dropXs.length })),
@@ -2137,6 +2244,8 @@ declare global {
       skip?: () => void;
       jump?: () => void;
       zoomOut?: () => void;
+      bumpZoom?: (dir: number) => void;
+      getZoom?: () => number;
       dump?: () => unknown;
     };
   }

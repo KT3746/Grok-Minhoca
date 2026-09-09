@@ -4,11 +4,14 @@ import {
   Crosshair,
   Flame,
   Hand,
+  Maximize2,
   Pause,
   Plane,
   Rocket,
   Volume2,
   VolumeX,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { MinhocaGame } from "@/game/game";
 import { WEAPONS, type UiSnap, type WeaponId } from "@/game/types";
@@ -97,6 +100,7 @@ export function MinhocaApp() {
         <>
           <TopHud ui={ui} g={g} />
           <TeamStrip ui={ui} />
+          {ui.touch && <ZoomDock g={g} />}
           <WeaponBar ui={ui} g={g} />
           {ui.touch && <TouchPad g={g} ui={ui} />}
           {!ui.touch && (
@@ -185,6 +189,7 @@ function Help({ g }: { g: MinhocaGame | null }) {
         <li>Ande com A/D ou os botões. Pule com J ou Shift.</li>
         <li>Mire com W/S. No toque, arraste no campo. O mouse também mira.</li>
         <li>Segure o disparo para a potência da bazuca e da granada. A linha pontilhada mostra a curva.</li>
+        <li>No celular: − e + no canto, ou pinça com dois dedos. O botão de campo abre o mapa inteiro.</li>
         <li>Explosões cavam o chão. Quedas, água e fogo amigo também matam.</li>
         <li>O último pelotão em pé vence. Esc ou P pausa.</li>
       </ul>
@@ -345,11 +350,42 @@ function MiniTeam({
   );
 }
 
+function ZoomDock({ g }: { g: MinhocaGame | null }) {
+  return (
+    <div className="absolute top-44 left-3 z-10 flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => g?.bumpZoom(1)}
+        className="flex size-11 items-center justify-center rounded-lg bg-ink/75"
+        aria-label="Aproximar"
+      >
+        <ZoomIn className="size-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => g?.bumpZoom(-1)}
+        className="flex size-11 items-center justify-center rounded-lg bg-ink/75"
+        aria-label="Afastar"
+      >
+        <ZoomOut className="size-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => g?.fitWorld()}
+        className="flex size-11 items-center justify-center rounded-lg bg-ink/75"
+        aria-label="Ver campo"
+      >
+        <Maximize2 className="size-4" />
+      </button>
+    </div>
+  );
+}
+
 function WeaponBar({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
   return (
     <div
       className={`absolute z-10 flex max-w-full gap-1.5 overflow-x-auto px-3 ${
-        ui.touch ? "bottom-28 left-0 right-0 justify-center" : "bottom-10 left-0 right-0 justify-center"
+        ui.touch ? "bottom-36 left-0 right-0 justify-center" : "bottom-10 left-0 right-0 justify-center"
       }`}
     >
       {WEAPONS.map((w) => {
