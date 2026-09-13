@@ -51,6 +51,34 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
+function mixTeams(): Team[] {
+  const t: Team[] = [0, 0, 0, 0, 1, 1, 1, 1];
+  for (let i = t.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const cur = t[i]!;
+    t[i] = t[j]!;
+    t[j] = cur;
+  }
+  const left = t[0]! + t[1]! + t[2]! + t[3]!;
+  if (left === 0 || left === 4) {
+    const cur = t[1]!;
+    t[1] = t[6]!;
+    t[6] = cur;
+  }
+  let run = 1;
+  for (let i = 1; i < t.length; i++) {
+    run = t[i] === t[i - 1] ? run + 1 : 1;
+    if (run >= 4) {
+      const j = i < 6 ? i + 1 : 0;
+      const cur = t[i]!;
+      t[i] = t[j]!;
+      t[j] = cur;
+      break;
+    }
+  }
+  return t;
+}
+
 const PREFS_KEY = "minhoca-prefs-v1";
 
 function readPrefs(): { muted: boolean; difficulty: Difficulty } {
@@ -317,7 +345,7 @@ export class MinhocaGame {
     this.weapon = "bazooka";
     this.loadout = ["bazooka", "bazooka"];
     this.winner = null;
-    this.turnIndex = [0, 3];
+    this.turnIndex = [0, 0];
     this.walkPad = 0;
     this.jumpQueued = false;
     this.fireHeld = false;
@@ -327,35 +355,49 @@ export class MinhocaGame {
     this.trauma = 0;
     this.freeze = 0;
     this.keys.clear();
-    let id = 0;
-    for (const team of [0, 1] as Team[]) {
-      const xs = this.terrain.spawnXs(team);
+    const spots = this.terrain.spawnPoints(8);
+    const teams = mixTeams();
+    let n0 = 0;
+    let n1 = 0;
+    for (let i = 0; i < 8; i++) {
+      const team = teams[i]!;
       const names = team === 0 ? NAMES_A : NAMES_B;
-      for (let i = 0; i < 4; i++) {
-        const x = xs[i];
-        const sy = this.terrain.surfaceY(x);
-        const y = sy > 0 ? sy - 1 : WATER_Y - 80;
-        this.worms.push({
-          id: id++,
-          team,
-          name: names[i],
-          x,
-          y,
-          vx: 0,
-          vy: 0,
-          hp: 100,
-          face: team === 0 ? 1 : -1,
-          aim: 0.55,
-          anim: "idle",
-          animT: Math.random(),
-          hurtT: 0,
-          flashT: 0,
-          drownT: 0,
-          walkAcc: 0,
-          grounded: true,
-          dead: false,
-        });
+      const idx = team === 0 ? n0++ : n1++;
+      const spot = spots[i]!;
+      const y = spot.y > 0 ? spot.y - 1 : WATER_Y - 80;
+      this.worms.push({
+        id: team * 4 + idx,
+        team,
+        name: names[idx]!,
+        x: spot.x,
+        y,
+        vx: 0,
+        vy: 0,
+        hp: 100,
+        face: 1,
+        aim: 0.55,
+        anim: "idle",
+        animT: Math.random(),
+        hurtT: 0,
+        flashT: 0,
+        drownT: 0,
+        walkAcc: 0,
+        grounded: true,
+        dead: false,
+      });
+    }
+    for (const w of this.worms) {
+      let best: Worm | null = null;
+      let bestD = 1e9;
+      for (const o of this.worms) {
+        if (o.team === w.team || o.dead) continue;
+        const d = Math.abs(o.x - w.x) + Math.abs(o.y - w.y) * 0.4;
+        if (d < bestD) {
+          bestD = d;
+          best = o;
+        }
       }
+      w.face = best && best.x < w.x ? -1 : 1;
     }
     this.team = 0;
     this.loading = false;

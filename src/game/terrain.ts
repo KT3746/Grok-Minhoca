@@ -229,24 +229,55 @@ export class Terrain {
     return { x: nx / m, y: ny / m };
   }
 
-  spawnXs(team: 0 | 1): number[] {
-    const left = team === 0;
-    const xs: number[] = [];
-    if (this.kind === "isles") {
-      const bases = left ? [0.14, 0.18, 0.22, 0.26] : [0.74, 0.78, 0.82, 0.86];
-      for (const f of bases) xs.push((f * this.w) | 0);
-    } else {
-      const start = left ? 0.1 : 0.58;
-      for (let i = 0; i < 4; i++) xs.push(((start + i * 0.08) * this.w) | 0);
+  spawnPoints(count: number): { x: number; y: number }[] {
+    const cand: { x: number; y: number }[] = [];
+    for (let x = 48; x < this.w - 48; x += 6) {
+      const y = this.surfaceY(x);
+      if (y < 36 || y > this.waterY - 42) continue;
+      if (!this.solid(x, y + 3)) continue;
+      if (this.solid(x, y - 22) || this.solid(x - 8, y - 16) || this.solid(x + 8, y - 16)) continue;
+      cand.push({ x, y });
     }
-    const placed = xs.map((x) => this.safeX(x));
-    for (let i = 0; i < placed.length; i++) {
-      let guard = 0;
-      while (guard < 16 && placed.some((p, j) => j !== i && Math.abs(p - placed[i]) < 56)) {
-        placed[i] = this.safeX(placed[i] + (left ? -28 : 28));
-        guard++;
+    if (!cand.length) {
+      const fallback: { x: number; y: number }[] = [];
+      for (let i = 0; i < count; i++) {
+        const x = this.safeX(((i + 1) / (count + 1)) * this.w);
+        const y = this.surfaceY(x);
+        fallback.push({ x, y: y > 0 ? y : this.waterY - 80 });
       }
+      return fallback;
     }
+    const placed: { x: number; y: number }[] = [];
+    placed.push(cand[(Math.random() * cand.length) | 0]!);
+    while (placed.length < count) {
+      let best = cand[0]!;
+      let bestScore = -1;
+      for (const c of cand) {
+        let min = 1e9;
+        for (const p of placed) {
+          const dx = c.x - p.x;
+          const dy = (c.y - p.y) * 0.45;
+          const d = Math.hypot(dx, dy);
+          if (d < min) min = d;
+        }
+        const score = min + Math.random() * 28;
+        if (score > bestScore) {
+          bestScore = score;
+          best = c;
+        }
+      }
+      if (bestScore < 58 && placed.length >= 6) break;
+      placed.push(best);
+      const i = cand.indexOf(best);
+      if (i >= 0) cand.splice(i, 1);
+      if (!cand.length) break;
+    }
+    while (placed.length < count) {
+      const x = this.safeX(((placed.length + 1) / (count + 1)) * this.w);
+      const y = this.surfaceY(x);
+      placed.push({ x, y: y > 0 ? y : this.waterY - 80 });
+    }
+    placed.sort((a, b) => a.x - b.x);
     return placed;
   }
 
