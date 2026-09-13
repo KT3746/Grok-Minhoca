@@ -1,6 +1,8 @@
 import { Sfx } from "./audio";
 import { Terrain, type MapKind } from "./terrain";
 import {
+  AIM_MAX,
+  AIM_MIN,
   GRAVITY,
   JUMP_VY,
   MAX_CLIMB,
@@ -163,6 +165,9 @@ export class MinhocaGame {
   keys = new Set<string>();
   forcedKeys: Set<string> | null = null;
   walkPad = 0;
+  aimPad = 0;
+  aimHoldT = 0;
+  canvasAiming = false;
   jumpQueued = false;
   fireHeld = false;
   pointerWorld: { x: number; y: number } | null = null;
@@ -349,6 +354,9 @@ export class MinhocaGame {
       this.winner = null;
       this.turnIndex = [0, 0];
       this.walkPad = 0;
+      this.aimPad = 0;
+      this.aimHoldT = 0;
+      this.canvasAiming = false;
       this.jumpQueued = false;
       this.fireHeld = false;
       this.pointerHeld = false;
@@ -660,22 +668,30 @@ export class MinhocaGame {
     const keys = this.held();
     const left = keys.has("KeyA") || keys.has("ArrowLeft") || this.walkPad < 0;
     const right = keys.has("KeyD") || keys.has("ArrowRight") || this.walkPad > 0;
-    const up = keys.has("KeyW") || keys.has("ArrowUp");
-    const down = keys.has("KeyS") || keys.has("ArrowDown");
+    const up = keys.has("KeyW") || keys.has("ArrowUp") || this.aimPad > 0;
+    const down = keys.has("KeyS") || keys.has("ArrowDown") || this.aimPad < 0;
 
     this.pointerAimT = Math.max(0, this.pointerAimT - dt);
+
     const keyAim = up || down;
-    const usePointer = !keyAim && !!this.pointerWorld && (this.touch || this.pointerHeld || this.pointerAimT > 0);
-    if (usePointer && this.pointerWorld && (this.phase === "turn" || this.phase === "charge")) {
+    const fingerAim = this.canvasAiming && !!this.pointerWorld && !this.pinching && !keyAim;
+    const mouseAim = !this.touch && !keyAim && !!this.pointerWorld && this.pointerAimT > 0;
+    if ((fingerAim || mouseAim) && this.pointerWorld && (this.phase === "turn" || this.phase === "charge")) {
       const dx = this.pointerWorld.x - w.x;
-      const dy = this.pointerWorld.y - (w.y - WORM_R);
-      w.face = dx >= 0 ? 1 : -1;
-      w.aim = clamp(Math.atan2(-dy, Math.abs(dx) + 0.01), -0.2, 1.35);
+      const dy = this.pointerWorld.y - (w.y - 16);
+      if (Math.abs(dx) > 10) w.face = dx >= 0 ? 1 : -1;
+      const target = clamp(Math.atan2(-dy, Math.abs(dx) + 0.01), AIM_MIN, AIM_MAX);
+      const k = 1 - Math.exp(-18 * dt);
+      w.aim += (target - w.aim) * k;
       if (this.weapon === "strike") this.strikeX = this.pointerWorld.x;
     }
 
-    if (up) w.aim = clamp(w.aim + 1.6 * dt, -0.2, 1.35);
-    if (down) w.aim = clamp(w.aim - 1.6 * dt, -0.2, 1.35);
+    if (keyAim) {
+      this.aimHoldT += dt;
+      const spd = this.aimHoldT > 0.32 ? 2.9 : 1.45;
+      if (up) w.aim = clamp(w.aim + spd * dt, AIM_MIN, AIM_MAX);
+      if (down) w.aim = clamp(w.aim - spd * dt, AIM_MIN, AIM_MAX);
+    } else this.aimHoldT = 0;
 
     if (this.phase === "charge") {
       this.power = clamp(this.power + dt * 0.85, 0.18, 1);
@@ -796,7 +812,7 @@ export class MinhocaGame {
     let best = { err: 1e9, aim: 0.6, power: 0.75 };
     const wind = this.wind;
     for (const power of [0.45, 0.6, 0.78, 0.95]) {
-      for (let aim = 0.15; aim <= 1.2; aim += 0.07) {
+      for (let aim = -0.7; aim <= 1.45; aim += 0.08) {
         const err = this.simRocket(w, target, aim, power, wind);
         if (err < best.err) best = { err, aim, power };
       }
@@ -1825,53 +1841,151 @@ export class MinhocaGame {
     if (!w || this.ai.on) return;
     const ctx = this.ctx;
     const ang = this.fireAngle(w);
-    const x = w.x + w.face * 10;
-    const y = w.y - 16;
-    const len = 34 + (this.phase === "charge" ? this.power * 22 : 0);
-    ctx.strokeStyle = "rgba(236,230,216,0.85)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
-    ctx.stroke();
-    if (this.weapon === "bazooka" || this.weapon === "grenade") this.drawTrajectory(w);
-    if (this.weapon === "strike") {
-      const sx = this.strikeX ?? this.pointerWorld?.x ?? w.x;
-      ctx.strokeStyle = "rgba(236,230,216,0.35)";
-      ctx.setLineDash([6, 6]);
+    const ox = w.x + w.face * 12;
+    const oy = w.y - 16;
+    const u = clamp(1 / this.zoom, 0.85, 2.4);
+    const c = Math.cos(ang);
+    const s = Math.sin(ang);
+    const charged = this.phase === "charge";
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = charged ? "rgba(236,230,216,1)" : "rgba(236,230,216,0.92)";
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.lineWidth = 1.7 * u;
+
+    const ticks = charged ? [18, 30, 42, 56] : [20, 34, 48];
+    for (const d of ticks) {
+      const x = ox + c * d * u;
+      const y = oy + s * d * u;
+      const tw = (d > 40 ? 5.5 : 4) * u;
       ctx.beginPath();
-      ctx.moveTo(sx, 0);
+      ctx.moveTo(x - s * tw, y + c * tw);
+      ctx.lineTo(x + s * tw, y - c * tw);
+      ctx.stroke();
+    }
+
+    const rd = (charged ? 70 : 62) * u;
+    const rx = ox + c * rd;
+    const ry = oy + s * rd;
+    const rh = 6.2 * u;
+    ctx.beginPath();
+    ctx.moveTo(rx + c * rh, ry + s * rh);
+    ctx.lineTo(rx - s * rh, ry + c * rh);
+    ctx.lineTo(rx - c * rh, ry - s * rh);
+    ctx.lineTo(rx + s * rh, ry - c * rh);
+    ctx.closePath();
+    ctx.stroke();
+    if (charged) {
+      ctx.globalAlpha = 0.35 + this.power * 0.5;
+      ctx.beginPath();
+      ctx.arc(rx, ry, 3.2 * u, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    if (this.weapon === "bazooka" || this.weapon === "grenade") this.drawTrajectory(w, u);
+    else if (this.weapon === "shotgun") this.drawHitscanAim(w, ang, ox, oy, u);
+    else if (this.weapon === "punch") {
+      ctx.strokeStyle = "rgba(236,230,216,0.55)";
+      ctx.beginPath();
+      ctx.ellipse(w.x + w.face * 22, w.y - 14, 16 * u, 12 * u, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (this.weapon === "strike") {
+      const sx = this.strikeX ?? this.pointerWorld?.x ?? w.x + w.face * 160;
+      ctx.strokeStyle = "rgba(236,230,216,0.4)";
+      ctx.setLineDash([5 * u, 6 * u]);
+      ctx.beginPath();
+      ctx.moveTo(sx, 8);
       ctx.lineTo(sx, WATER_Y);
       ctx.stroke();
       ctx.setLineDash([]);
+      const gy = this.terrain.surfaceY(sx);
+      if (gy > 0) {
+        ctx.beginPath();
+        ctx.moveTo(sx - 10 * u, gy);
+        ctx.lineTo(sx, gy - 12 * u);
+        ctx.lineTo(sx + 10 * u, gy);
+        ctx.stroke();
+      }
     }
+    ctx.restore();
   }
 
-  private drawTrajectory(w: Worm) {
-    const power = this.phase === "charge" ? this.power : 0.58;
+  private drawHitscanAim(w: Worm, ang: number, ox: number, oy: number, u: number) {
+    const ctx = this.ctx;
+    ctx.strokeStyle = "rgba(236,230,216,0.45)";
+    ctx.setLineDash([4 * u, 5 * u]);
+    for (const off of [-0.05, 0.05]) {
+      const a = ang + off;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.lineTo(ox + Math.cos(a) * 210, oy + Math.sin(a) * 210);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  private drawTrajectory(w: Worm, u: number) {
+    const power = this.phase === "charge" ? this.power : 0.52;
     const ang = this.fireAngle(w);
-    const sp = this.weapon === "bazooka" ? 200 + 560 * power : 160 + 480 * power;
-    const windF = this.weapon === "bazooka" ? 1 : 0.55;
+    const grenade = this.weapon === "grenade";
+    const sp = grenade ? 160 + 480 * power : 200 + 560 * power;
+    const windF = grenade ? 0.55 : 1;
+    const bounce = grenade ? 0.52 : 0;
     let x = w.x + w.face * 14;
     let y = w.y - 16;
     let vx = Math.cos(ang) * sp;
     let vy = Math.sin(ang) * sp;
     const ctx = this.ctx;
-    ctx.save();
-    ctx.fillStyle = "rgba(236,230,216,0.55)";
-    for (let i = 0; i < 70; i++) {
-      vx += this.wind * 92 * windF * STEP;
-      vy += GRAVITY * STEP;
-      x += vx * STEP;
-      y += vy * STEP;
-      if (this.terrain.solid(x, y) || y > WATER_Y) break;
-      if (i % 3 === 0) {
+    const h = STEP;
+    let lastX = x;
+    let lastY = y;
+    ctx.fillStyle = "rgba(236,230,216,0.78)";
+    const steps = grenade ? 160 : 90;
+    for (let i = 0; i < steps; i++) {
+      vx += this.wind * 92 * windF * h;
+      vy += GRAVITY * h;
+      x += vx * h;
+      y += vy * h;
+      if (x < 4 || x > WORLD_W - 4 || y > WORLD_H + 20) break;
+      if (y > WATER_Y + 8) break;
+      if (this.terrain.solid(x, y)) {
+        if (bounce > 0) {
+          x -= vx * h;
+          y -= vy * h;
+          const n = this.terrain.normal(x, y);
+          const dot = vx * n.x + vy * n.y;
+          vx = (vx - 2 * dot * n.x) * bounce;
+          vy = (vy - 2 * dot * n.y) * bounce;
+          x += n.x * 3;
+          y += n.y * 3;
+          if (Math.hypot(vx, vy) < 40) {
+            vx = 0;
+            vy = 0;
+          }
+        } else break;
+      }
+      lastX = x;
+      lastY = y;
+      if (i % (grenade ? 4 : 3) === 0) {
+        const r = (i > 50 ? 1.1 : 1.9) * u;
+        ctx.globalAlpha = 0.35 + 0.5 * (1 - i / steps);
         ctx.beginPath();
-        ctx.arc(x, y, i > 40 ? 1.2 : 1.8, 0, Math.PI * 2);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
       }
     }
-    ctx.restore();
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = "rgba(236,230,216,0.9)";
+    ctx.lineWidth = 1.6 * u;
+    ctx.beginPath();
+    ctx.moveTo(lastX - 5 * u, lastY - 5 * u);
+    ctx.lineTo(lastX + 5 * u, lastY + 5 * u);
+    ctx.moveTo(lastX + 5 * u, lastY - 5 * u);
+    ctx.lineTo(lastX - 5 * u, lastY + 5 * u);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 
   private drawShots() {
@@ -2057,6 +2171,8 @@ export class MinhocaGame {
     this.fireHeld = false;
     this.pointerHeld = false;
     this.walkPad = 0;
+    this.aimPad = 0;
+    this.canvasAiming = false;
     if (this.phase === "charge" && this.screen === "play") {
       this.phase = "turn";
       this.power = 0;
@@ -2097,10 +2213,12 @@ export class MinhocaGame {
       this.pinchDist = this.pointerSpan();
       this.pinchZoom = this.zoom;
       this.pointerHeld = false;
+      this.canvasAiming = false;
       return;
     }
     this.pointerWorld = this.toWorld(ev);
-    this.pointerAimT = 0.7;
+    this.pointerAimT = 1.2;
+    this.canvasAiming = true;
     if (this.hudFire) return;
     if (this.screen !== "play" || this.loading) return;
     if (this.phase !== "turn" && this.phase !== "charge") return;
@@ -2122,13 +2240,16 @@ export class MinhocaGame {
       return;
     }
     this.pointerWorld = this.toWorld(ev);
-    this.pointerAimT = 0.7;
+    this.pointerAimT = 1.2;
+    if (!this.pinching) this.canvasAiming = true;
   };
 
   private onPtrUp = (ev: PointerEvent) => {
     this.pointers.delete(ev.pointerId);
     if (this.pointers.size < 2) this.pinching = false;
     this.pointerHeld = false;
+    this.canvasAiming = this.pointers.size > 0;
+    this.pointerAimT = this.touch ? 0 : this.pointerAimT;
     if (!this.hudFire) this.releaseFire();
     this.fireHeld = false;
   };
@@ -2145,6 +2266,14 @@ export class MinhocaGame {
 
   releaseWalk(dir: number) {
     if (this.walkPad === dir) this.walkPad = 0;
+  }
+
+  setAim(dir: number) {
+    this.aimPad = dir;
+  }
+
+  releaseAim(dir: number) {
+    if (this.aimPad === dir) this.aimPad = 0;
   }
 
   setMuted(v: boolean) {
@@ -2207,6 +2336,8 @@ export class MinhocaGame {
       setWeapon: (id: string) => this.setWeapon(id as WeaponId),
       skip: () => this.skipTurn(),
       jump: () => this.jump(),
+      setAim: (dir: number) => this.setAim(dir),
+      getAim: () => this.active()?.aim ?? 0,
       zoomOut: () => {
         this.fitWorld();
       },
@@ -2323,6 +2454,8 @@ declare global {
       setWeapon?: (id: string) => void;
       skip?: () => void;
       jump?: () => void;
+      setAim?: (dir: number) => void;
+      getAim?: () => number;
       zoomOut?: () => void;
       bumpZoom?: (dir: number) => void;
       getZoom?: () => number;

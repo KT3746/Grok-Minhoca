@@ -9,6 +9,8 @@ export const MAX_CLIMB = 16;
 export const WALK_SPEED = 78;
 export const JUMP_VY = -430;
 export const TURN_SECS = 32;
+export const AIM_MIN = -1.22;
+export const AIM_MAX = 1.55;
 
 export type Team = 0 | 1;
 export type WeaponId = "bazooka" | "grenade" | "dynamite" | "shotgun" | "punch" | "strike";

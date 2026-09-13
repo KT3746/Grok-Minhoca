@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bomb,
+  ChevronDown,
+  ChevronUp,
   Crosshair,
   Flame,
   Hand,
@@ -103,7 +105,7 @@ export function MinhocaApp() {
           {ui.touch && <TouchPad g={g} ui={ui} />}
           {!ui.touch && (
             <p className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 text-center text-xs text-muted">
-              A/D andar · W/S mirar · espaço disparar · J pular · N passar · armas no botão
+              A/D andar · W/S mirar · espaço disparar · J pular · N passar
             </p>
           )}
         </>
@@ -185,7 +187,7 @@ function Help({ g }: { g: MinhocaGame | null }) {
       <h2 className="font-display text-5xl tracking-wide">Como jogar</h2>
       <ul className="space-y-3 text-sm leading-relaxed text-cream/90">
         <li>Ande com A/D ou os botões. Pule com J ou Shift.</li>
-        <li>Mire com W/S. No toque, arraste no campo. O mouse também mira.</li>
+        <li>Mire com W/S, os botões ▲▼, ou arraste no campo. A linha pontilhada é a curva do tiro.</li>
         <li>Segure o disparo para a potência da bazuca e da granada. A linha pontilhada mostra a curva.</li>
         <li>No celular: + e − no canto, pinça com dois dedos, ou o botão de campo. O zoom vai do mapa inteiro até bem perto.</li>
         <li>Armas: toque em Armas e escolha na lista.</li>
@@ -308,7 +310,7 @@ function WeaponDock({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
   return (
     <div
       className={`absolute z-20 flex flex-col ${
-        ui.touch ? "bottom-[4.75rem] left-3 items-start" : "bottom-10 left-1/2 -translate-x-1/2 items-center"
+        ui.touch ? "bottom-[4.75rem] right-3 items-end" : "bottom-10 left-1/2 -translate-x-1/2 items-center"
       }`}
     >
       {open && (
@@ -358,19 +360,57 @@ function TouchPad({ g, ui }: { g: MinhocaGame | null; ui: UiSnap }) {
   const slim = ui.wide;
   return (
     <div className="absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      <div className="flex gap-2">
-        <PadBtn
-          label="Esq"
-          slim={slim}
-          onDown={() => g?.setWalk(-1)}
-          onUp={() => g?.releaseWalk(-1)}
-        />
-        <PadBtn
-          label="Dir"
-          slim={slim}
-          onDown={() => g?.setWalk(1)}
-          onUp={() => g?.releaseWalk(1)}
-        />
+      <div className="flex items-end gap-2">
+        <div className="flex gap-2">
+          <PadBtn
+            label="Esq"
+            slim={slim}
+            onDown={() => g?.setWalk(-1)}
+            onUp={() => g?.releaseWalk(-1)}
+          />
+          <PadBtn
+            label="Dir"
+            slim={slim}
+            onDown={() => g?.setWalk(1)}
+            onUp={() => g?.releaseWalk(1)}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            aria-label="Mirar para cima"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              g?.setAim(1);
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              g?.releaseAim(1);
+            }}
+            onPointerCancel={() => g?.releaseAim(1)}
+            className={`flex items-center justify-center rounded-xl bg-ink/80 ${slim ? "size-12" : "size-12"}`}
+          >
+            <ChevronUp className="size-5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Mirar para baixo"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              g?.setAim(-1);
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              g?.releaseAim(-1);
+            }}
+            onPointerCancel={() => g?.releaseAim(-1)}
+            className="flex size-12 items-center justify-center rounded-xl bg-ink/80"
+          >
+            <ChevronDown className="size-5" />
+          </button>
+        </div>
       </div>
       <div className={`flex items-end gap-2 ${slim ? "" : "flex-col"}`}>
         <PadBtn label="Pular" slim={slim} onDown={() => g?.jump()} />
