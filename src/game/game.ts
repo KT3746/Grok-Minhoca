@@ -1526,11 +1526,11 @@ export class MinhocaGame {
   private minZoom() {
     const zW = this.cssW / WORLD_W;
     const zH = this.cssH / WORLD_H;
-    return Math.max(0.18, Math.min(zW, zH) * 0.96);
+    return Math.max(0.1, Math.min(zW, zH) * 0.82);
   }
 
   private maxZoom() {
-    return this.touch ? 1.45 : 1.7;
+    return 2.6;
   }
 
   private landscape() {
@@ -1549,7 +1549,7 @@ export class MinhocaGame {
   }
 
   bumpZoom(dir: number) {
-    this.applyZoom(this.zoom * (dir < 0 ? 0.78 : 1.28), this.cssW / 2, this.cssH * (this.touch ? 0.42 : 0.5));
+    this.applyZoom(this.zoom * (dir < 0 ? 0.72 : 1.4), this.cssW / 2, this.cssH * (this.touch ? 0.42 : 0.5));
   }
 
   fitWorld() {
@@ -1569,10 +1569,10 @@ export class MinhocaGame {
 
   private lookAt(x: number, y: number) {
     this.camTX = x - this.viewW() / 2;
-    const top = this.touch ? (this.landscape() ? 72 : 78) : 24;
-    const bot = this.touch ? (this.landscape() ? 70 : 168) : 36;
+    const top = this.touch ? (this.landscape() ? 48 : 52) : 20;
+    const bot = this.touch ? (this.landscape() ? 64 : 148) : 48;
     const usable = Math.max(180, this.cssH - top - bot);
-    this.camTY = y - (top + usable * 0.58) / this.zoom;
+    this.camTY = y - (top + usable * 0.46) / this.zoom;
   }
 
   private clampCam() {
@@ -1982,7 +1982,7 @@ export class MinhocaGame {
     const ctx = this.ctx;
     const w = Math.min(220, this.cssW - 48);
     const x = (this.cssW - w) / 2;
-    const y = this.cssH - (this.landscape() ? 52 : this.touch ? 118 : 78);
+    const y = this.cssH - (this.landscape() ? 58 : this.touch ? 168 : 72);
     ctx.fillStyle = "rgba(11,13,16,0.55)";
     ctx.fillRect(x, y, w, 10);
     ctx.fillStyle = "#ece6d8";

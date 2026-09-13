@@ -5,7 +5,6 @@ import {
   Flame,
   Hand,
   Maximize2,
-  Pause,
   Plane,
   Rocket,
   Volume2,
@@ -100,12 +99,11 @@ export function MinhocaApp() {
       {playing && !ui.loading && (
         <>
           <TopHud ui={ui} g={g} />
-          {!ui.wide && <TeamStrip ui={ui} />}
-          <WeaponBar ui={ui} g={g} />
+          <WeaponDock ui={ui} g={g} />
           {ui.touch && <TouchPad g={g} ui={ui} />}
           {!ui.touch && (
             <p className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 text-center text-xs text-muted">
-              A/D andar · W/S mirar · espaço disparar · J pular · N passar · 1–6 armas
+              A/D andar · W/S mirar · espaço disparar · J pular · N passar · armas no botão
             </p>
           )}
         </>
@@ -189,7 +187,8 @@ function Help({ g }: { g: MinhocaGame | null }) {
         <li>Ande com A/D ou os botões. Pule com J ou Shift.</li>
         <li>Mire com W/S. No toque, arraste no campo. O mouse também mira.</li>
         <li>Segure o disparo para a potência da bazuca e da granada. A linha pontilhada mostra a curva.</li>
-        <li>No celular: − e + no canto, ou pinça com dois dedos. O botão de campo abre o mapa inteiro.</li>
+        <li>No celular: + e − no canto, pinça com dois dedos, ou o botão de campo. O zoom vai do mapa inteiro até bem perto.</li>
+        <li>Armas: toque em Armas e escolha na lista.</li>
         <li>Explosões cavam o chão. Quedas, água e fogo amigo também matam.</li>
         <li>O último pelotão em pé vence. Esc ou P pausa.</li>
       </ul>
@@ -258,166 +257,99 @@ function TopHud({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
   const team = ui.team === 0 ? "Oliva" : "Rubro";
   const low = ui.timer <= 6;
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between px-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-      <div className="rounded-lg bg-ink/70 px-3 py-2">
-        <p className="text-xs uppercase tracking-[0.18em] text-muted">Vento</p>
-        <p className="font-display text-2xl leading-none tabular-nums text-cream">
-          {arrow} <span className="text-lg text-muted">{Math.abs(ui.wind).toFixed(1)}</span>
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between px-2 pt-[max(0.4rem,env(safe-area-inset-top))]">
+      <div className="rounded-md bg-ink/55 px-2 py-1">
+        <p className="font-display text-lg leading-none tabular-nums text-cream">
+          {arrow} <span className="text-sm text-muted">{Math.abs(ui.wind).toFixed(1)}</span>
         </p>
       </div>
-      <div className="rounded-lg bg-ink/70 px-4 py-2 text-center">
-        <p className="text-xs uppercase tracking-[0.18em] text-muted">
+      <div className="rounded-md bg-ink/55 px-2.5 py-1 text-center">
+        <p className="text-2xs uppercase tracking-wide text-muted">
           {team} · {ui.wormName}
         </p>
-        <p className={`font-display text-4xl leading-none tabular-nums ${low ? "text-crimson" : "text-cream"}`}>
+        <p className={`font-display text-xl leading-none tabular-nums ${low ? "text-crimson" : "text-cream"}`}>
           {Math.ceil(ui.timer)}
         </p>
       </div>
-      <div className="pointer-events-auto flex gap-1.5">
-        {ui.touch && (
-          <>
-            <button
-              type="button"
-              onClick={() => g?.bumpZoom(1)}
-              className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
-              aria-label="Aproximar"
-            >
-              <ZoomIn className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => g?.bumpZoom(-1)}
-              className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
-              aria-label="Afastar"
-            >
-              <ZoomOut className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => g?.fitWorld()}
-              className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
-              aria-label="Ver campo"
-            >
-              <Maximize2 className="size-4" />
-            </button>
-          </>
-        )}
-        {!ui.touch && (
-          <button
-            type="button"
-            onClick={() => g?.skipTurn()}
-            disabled={!ui.canAct}
-            className="flex h-11 items-center rounded-lg bg-ink/70 px-3 text-xs font-medium uppercase tracking-wide disabled:opacity-40"
-          >
-            Passar
-          </button>
-        )}
+      <div className="pointer-events-auto flex gap-1">
         <button
           type="button"
-          onClick={() => g?.setMuted(!ui.muted)}
-          className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
-          aria-label="Som"
+          onClick={() => g?.bumpZoom(1)}
+          className="flex size-10 items-center justify-center rounded-md bg-ink/60"
+          aria-label="Aproximar"
         >
-          {ui.muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+          <ZoomIn className="size-4" />
         </button>
         <button
           type="button"
-          onClick={() => g?.pause()}
-          className="flex size-10 items-center justify-center rounded-lg bg-ink/70"
-          aria-label="Pausa"
+          onClick={() => g?.bumpZoom(-1)}
+          className="flex size-10 items-center justify-center rounded-md bg-ink/60"
+          aria-label="Afastar"
         >
-          <Pause className="size-4" />
+          <ZoomOut className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => g?.fitWorld()}
+          className="flex size-10 items-center justify-center rounded-md bg-ink/60"
+          aria-label="Ver campo"
+        >
+          <Maximize2 className="size-4" />
         </button>
       </div>
     </div>
   );
 }
 
-function TeamStrip({ ui }: { ui: UiSnap }) {
-  return (
-    <div className="pointer-events-none absolute top-16 left-3 right-3 z-10 flex justify-between gap-4">
-      <MiniTeam names={ui.namesA} hp={ui.hpA} accent="bg-olive-2" active={ui.wormName} />
-      <MiniTeam names={ui.namesB} hp={ui.hpB} accent="bg-crimson" align="right" active={ui.wormName} />
-    </div>
-  );
-}
-
-function MiniTeam({
-  names,
-  hp,
-  accent,
-  align = "left",
-  active,
-}: {
-  names: string[];
-  hp: number[];
-  accent: string;
-  align?: "left" | "right";
-  active?: string;
-}) {
-  return (
-    <div className={`flex flex-col gap-1 ${align === "right" ? "items-end" : "items-start"}`}>
-      {names.map((n, i) => {
-        const dead = (hp[i] ?? 0) <= 0;
-        const on = !dead && n === active;
-        return (
-          <div key={n} className={`flex items-center gap-2 ${dead ? "opacity-40" : ""}`}>
-            {align === "right" && (
-              <span className={`text-xs ${on ? "font-semibold text-cream" : "text-muted"}`}>{n}</span>
-            )}
-            <div className={`h-1 w-14 overflow-hidden rounded-full bg-ink/70 ${on ? "ring-1 ring-cream/50" : ""}`}>
-              <div className={`h-full ${accent}`} style={{ width: `${hp[i] ?? 0}%` }} />
-            </div>
-            {align === "left" && (
-              <span className={`text-xs ${on ? "font-semibold text-cream" : "text-muted"}`}>{n}</span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function WeaponBar({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
-  const compact = ui.wide;
+function WeaponDock({ ui, g }: { ui: UiSnap; g: MinhocaGame | null }) {
+  const [open, setOpen] = useState(false);
+  const current = WEAPONS.find((w) => w.id === ui.weapon) ?? WEAPONS[0];
+  const CurrentIcon = ICONS[current.id];
   return (
     <div
-      className={`absolute z-10 flex max-w-[min(100%,42rem)] gap-1 overflow-x-auto px-2 ${
-        compact
-          ? "top-[4.25rem] left-1/2 -translate-x-1/2 justify-center"
-          : ui.touch
-            ? "bottom-24 left-0 right-0 justify-center"
-            : "bottom-10 left-0 right-0 justify-center"
+      className={`absolute z-20 flex flex-col ${
+        ui.touch ? "bottom-[4.75rem] left-3 items-start" : "bottom-10 left-1/2 -translate-x-1/2 items-center"
       }`}
     >
-      {WEAPONS.map((w) => {
-        const Icon = ICONS[w.id];
-        const ammo = ui.ammo[w.id];
-        const empty = ammo === 0;
-        const on = ui.weapon === w.id;
-        return (
-          <button
-            key={w.id}
-            type="button"
-            disabled={empty || !ui.canAct}
-            onClick={() => g?.setWeapon(w.id)}
-            className={`flex items-center justify-center rounded-lg ${
-              compact ? "size-10" : "min-w-12 flex-col px-2 py-1.5"
-            } ${on ? "bg-cream text-ink" : "bg-ink/80 text-cream"} ${empty ? "opacity-35" : ""}`}
-            aria-label={w.label}
-          >
-            <Icon className="size-4" />
-            {!compact && (
-              <>
-                <span className="mt-0.5 text-2xs font-medium uppercase tracking-wide">{w.label}</span>
-                <span className={`text-xs tabular-nums ${on ? "text-ink/70" : "text-muted"}`}>
+      {open && (
+        <div className="mb-2 w-48 overflow-hidden rounded-xl border border-border bg-ink-2/95">
+          {WEAPONS.map((w) => {
+            const Icon = ICONS[w.id];
+            const ammo = ui.ammo[w.id];
+            const empty = ammo === 0;
+            const on = ui.weapon === w.id;
+            return (
+              <button
+                key={w.id}
+                type="button"
+                disabled={empty || !ui.canAct}
+                onClick={() => {
+                  g?.setWeapon(w.id);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm ${
+                  on ? "bg-cream text-ink" : "text-cream"
+                } ${empty ? "opacity-35" : ""}`}
+              >
+                <Icon className="size-4 shrink-0" />
+                <span className="flex-1 font-medium">{w.label}</span>
+                <span className={`tabular-nums text-xs ${on ? "text-ink/70" : "text-muted"}`}>
                   {ammo < 0 ? "∞" : ammo}
                 </span>
-              </>
-            )}
-          </button>
-        );
-      })}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-12 items-center gap-2 rounded-xl bg-ink/80 px-4 text-sm font-medium uppercase tracking-wide"
+        aria-expanded={open}
+      >
+        <CurrentIcon className="size-4" />
+        Armas
+      </button>
     </div>
   );
 }
