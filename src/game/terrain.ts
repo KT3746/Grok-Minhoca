@@ -231,7 +231,7 @@ export class Terrain {
 
   spawnPoints(count: number): { x: number; y: number }[] {
     const cand: { x: number; y: number }[] = [];
-    for (let x = 48; x < this.w - 48; x += 6) {
+    for (let x = 90; x < this.w - 90; x += 8) {
       const y = this.surfaceY(x);
       if (y < 36 || y > this.waterY - 42) continue;
       if (!this.solid(x, y + 3)) continue;

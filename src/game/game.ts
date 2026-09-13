@@ -237,7 +237,6 @@ export class MinhocaGame {
         if (!this.destroyed && this.screen === "menu") this.previewMap();
         this.emit(true);
       });
-    await this.loadPromise;
   }
 
   destroy() {
@@ -330,82 +329,92 @@ export class MinhocaGame {
     this.planes = [];
     this.zoom = this.defaultZoom();
     this.emit(true);
-    if (this.loadPromise) await this.loadPromise;
-    if (this.destroyed) return;
-    const kind = MAPS[(Math.random() * MAPS.length) | 0];
-    this.terrain.generate(kind, (Math.random() * 1e9) | 0);
-    this.terrain.paint(this.imgs["dirt.jpg"]);
-    this.worms = [];
-    this.shots = [];
-    this.planes = [];
-    this.particles = [];
-    this.booms = [];
-    this.pendingBooms = [];
-    this.ammo = [emptyAmmo(), emptyAmmo()];
-    this.weapon = "bazooka";
-    this.loadout = ["bazooka", "bazooka"];
-    this.winner = null;
-    this.turnIndex = [0, 0];
-    this.walkPad = 0;
-    this.jumpQueued = false;
-    this.fireHeld = false;
-    this.pointerHeld = false;
-    this.power = 0;
-    this.acc = 0;
-    this.trauma = 0;
-    this.freeze = 0;
-    this.keys.clear();
-    const spots = this.terrain.spawnPoints(8);
-    const teams = mixTeams();
-    let n0 = 0;
-    let n1 = 0;
-    for (let i = 0; i < 8; i++) {
-      const team = teams[i]!;
-      const names = team === 0 ? NAMES_A : NAMES_B;
-      const idx = team === 0 ? n0++ : n1++;
-      const spot = spots[i]!;
-      const y = spot.y > 0 ? spot.y - 1 : WATER_Y - 80;
-      this.worms.push({
-        id: team * 4 + idx,
-        team,
-        name: names[idx]!,
-        x: spot.x,
-        y,
-        vx: 0,
-        vy: 0,
-        hp: 100,
-        face: 1,
-        aim: 0.55,
-        anim: "idle",
-        animT: Math.random(),
-        hurtT: 0,
-        flashT: 0,
-        drownT: 0,
-        walkAcc: 0,
-        grounded: true,
-        dead: false,
-      });
-    }
-    for (const w of this.worms) {
-      let best: Worm | null = null;
-      let bestD = 1e9;
-      for (const o of this.worms) {
-        if (o.team === w.team || o.dead) continue;
-        const d = Math.abs(o.x - w.x) + Math.abs(o.y - w.y) * 0.4;
-        if (d < bestD) {
-          bestD = d;
-          best = o;
-        }
+    try {
+      if (this.loadPromise) {
+        await Promise.race([this.loadPromise, new Promise<void>((r) => setTimeout(r, 1800))]);
       }
-      w.face = best && best.x < w.x ? -1 : 1;
-    }
-    this.team = 0;
-    this.loading = false;
-    this.beginTurn(true);
-    const w = this.active();
-    if (w) {
-      this.camX = w.x - this.viewW() / 2;
-      this.camY = w.y - this.viewH() * 0.6;
+      if (this.destroyed) return;
+      const kind = MAPS[(Math.random() * MAPS.length) | 0];
+      this.terrain.generate(kind, (Math.random() * 1e9) | 0);
+      this.terrain.paint(this.imgs["dirt.jpg"]);
+      this.worms = [];
+      this.shots = [];
+      this.planes = [];
+      this.particles = [];
+      this.booms = [];
+      this.pendingBooms = [];
+      this.ammo = [emptyAmmo(), emptyAmmo()];
+      this.weapon = "bazooka";
+      this.loadout = ["bazooka", "bazooka"];
+      this.winner = null;
+      this.turnIndex = [0, 0];
+      this.walkPad = 0;
+      this.jumpQueued = false;
+      this.fireHeld = false;
+      this.pointerHeld = false;
+      this.power = 0;
+      this.acc = 0;
+      this.trauma = 0;
+      this.freeze = 0;
+      this.keys.clear();
+      const spots = this.terrain.spawnPoints(8);
+      const teams = mixTeams();
+      let n0 = 0;
+      let n1 = 0;
+      for (let i = 0; i < 8; i++) {
+        const team = teams[i]!;
+        const names = team === 0 ? NAMES_A : NAMES_B;
+        const idx = team === 0 ? n0++ : n1++;
+        const spot = spots[i]!;
+        const y = spot.y > 0 ? spot.y - 1 : WATER_Y - 80;
+        this.worms.push({
+          id: team * 4 + idx,
+          team,
+          name: names[idx]!,
+          x: spot.x,
+          y,
+          vx: 0,
+          vy: 0,
+          hp: 100,
+          face: 1,
+          aim: 0.55,
+          anim: "idle",
+          animT: Math.random(),
+          hurtT: 0,
+          flashT: 0,
+          drownT: 0,
+          walkAcc: 0,
+          grounded: true,
+          dead: false,
+        });
+      }
+      for (const w of this.worms) {
+        let best: Worm | null = null;
+        let bestD = 1e9;
+        for (const o of this.worms) {
+          if (o.team === w.team || o.dead) continue;
+          const d = Math.abs(o.x - w.x) + Math.abs(o.y - w.y) * 0.4;
+          if (d < bestD) {
+            bestD = d;
+            best = o;
+          }
+        }
+        w.face = best && best.x < w.x ? -1 : 1;
+      }
+      this.team = 0;
+      this.beginTurn(true);
+      const w = this.active();
+      if (w) {
+        this.lookAt(w.x, w.y);
+        this.camX = this.camTX;
+        this.camY = this.camTY;
+        this.clampCam();
+      }
+    } catch {
+      this.screen = "menu";
+    } finally {
+      this.loading = false;
+      this.emit(true);
     }
   }
 
@@ -1531,7 +1540,8 @@ export class MinhocaGame {
   private defaultZoom() {
     if (!this.touch) return 0.92;
     if (this.landscape()) return clamp(this.cssH / 420, 0.82, 1.22);
-    return clamp(this.cssW / 860, 0.62, 0.95);
+    const playH = Math.max(280, this.cssH - 210);
+    return clamp(playH / 520, 0.82, 1.25);
   }
 
   private wormDraw() {
@@ -1559,7 +1569,10 @@ export class MinhocaGame {
 
   private lookAt(x: number, y: number) {
     this.camTX = x - this.viewW() / 2;
-    this.camTY = y - this.viewH() * (this.landscape() ? 0.52 : this.touch ? 0.4 : 0.58);
+    const top = this.touch ? (this.landscape() ? 72 : 78) : 24;
+    const bot = this.touch ? (this.landscape() ? 70 : 168) : 36;
+    const usable = Math.max(180, this.cssH - top - bot);
+    this.camTY = y - (top + usable * 0.58) / this.zoom;
   }
 
   private clampCam() {
@@ -1571,12 +1584,12 @@ export class MinhocaGame {
       this.camX = clamp(this.camX, 0, WORLD_W - vw);
       this.camTX = clamp(this.camTX, 0, WORLD_W - vw);
     }
-    if (vh >= WORLD_H) {
-      this.camY = this.camTY = WORLD_H - vh + 12;
-    } else {
-      this.camY = clamp(this.camY, -40, WORLD_H - vh + 40);
-      this.camTY = clamp(this.camTY, -40, WORLD_H - vh + 40);
-    }
+    const top = (this.touch ? 40 : 10) / this.zoom;
+    const bot = (this.touch ? 90 : 16) / this.zoom;
+    const minY = Math.min(-top, WORLD_H - vh + bot);
+    const maxY = Math.max(-top, WORLD_H - vh + bot);
+    this.camY = clamp(this.camY, minY, maxY);
+    this.camTY = clamp(this.camTY, minY, maxY);
   }
 
   private updateCam(dt: number) {
