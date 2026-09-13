@@ -73,7 +73,7 @@ export function MinhocaApp() {
   const overlay = ui.screen === "menu" || ui.screen === "help" || ui.screen === "win" || ui.screen === "pause";
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-ink text-cream">
+    <div className="relative h-dvh w-full overflow-hidden bg-ink text-cream select-none">
       <canvas
         ref={canvasRef}
         className="absolute inset-0 block h-full w-full touch-none"
