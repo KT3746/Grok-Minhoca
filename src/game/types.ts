@@ -130,6 +130,8 @@ export type UiSnap = {
   charging: boolean;
   power: number;
   canAct: boolean;
+  cpu: boolean;
+  showBanner: boolean;
 };
 
 export function emptyAmmo(): Ammo {

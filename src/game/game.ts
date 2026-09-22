@@ -176,6 +176,7 @@ export class MinhocaGame {
   private pinchDist = 0;
   private pinchZoom = 1;
   private pinching = false;
+  private controlsArmed = true;
 
   camX = 0;
   camY = 0;
@@ -257,6 +258,7 @@ export class MinhocaGame {
     this.canvas.removeEventListener("pointerup", this.onPtrUp);
     this.canvas.removeEventListener("pointercancel", this.onPtrUp);
     this.canvas.removeEventListener("wheel", this.onWheel);
+    this.canvas.removeEventListener("contextmenu", this.onContext);
     if (window.__controlsTest) delete window.__controlsTest;
   }
 
@@ -364,6 +366,7 @@ export class MinhocaGame {
       this.acc = 0;
       this.trauma = 0;
       this.freeze = 0;
+      this.controlsArmed = true;
       this.keys.clear();
       const spots = this.terrain.spawnPoints(8);
       const teams = mixTeams();
@@ -427,6 +430,7 @@ export class MinhocaGame {
   }
 
   private beginTurn(first = false) {
+    this.detonateLeftovers();
     this.shots = [];
     this.planes = [];
     this.phase = "intro";
@@ -443,6 +447,7 @@ export class MinhocaGame {
     this.flyT = 0;
     this.pendingBooms = [];
     this.inputLock = first ? 0.45 : 0.18;
+    this.controlsArmed = false;
     this.wind = (Math.random() * 2 - 1) * (this.difficulty === "vet" ? 1 : 0.72);
     const w = this.active();
     if (w) {
@@ -555,12 +560,14 @@ export class MinhocaGame {
     }
 
     this.acc += dt;
+    if (this.acc > STEP * 8) this.acc = STEP * 8;
     let steps = 0;
-    while (this.acc >= STEP && steps < 5) {
+    while (this.acc >= STEP && steps < 8) {
       this.physics(STEP);
       this.acc -= STEP;
       steps++;
     }
+    if (steps >= 8) this.acc = 0;
 
     this.stepFx(dt);
     this.updateCam(dt);
@@ -584,9 +591,9 @@ export class MinhocaGame {
       if (this.introT <= 0) {
         this.phase = "turn";
         this.fireHeld = false;
-        this.pointerHeld = false;
         this.power = 0;
         this.inputLock = Math.max(this.inputLock, 0.2);
+        this.armControls();
         this.emit(true);
       }
       return;
@@ -626,7 +633,10 @@ export class MinhocaGame {
       this.stepPlanes(dt);
       this.afterSim();
       this.flyT += dt;
-      if (this.airborneClear() || this.flyT > 8) {
+      if (this.airborneClear()) {
+        this.toSettle(0.35);
+      } else if (this.flyT > 12) {
+        this.detonateLeftovers();
         this.toSettle(0.35);
       }
       return;
@@ -638,14 +648,18 @@ export class MinhocaGame {
       this.stepPlanes(dt);
       this.afterSim();
       this.settleMax += dt;
+      const drowning = this.worms.some((w) => !w.dead && w.y - 4 > WATER_Y);
       const moving = this.worms.some((w) => {
         if (w.dead) return false;
-        if (w.y - 4 > WATER_Y) return false;
+        if (w.y - 4 > WATER_Y) return true;
         return !w.grounded || Math.abs(w.vy) > 24 || Math.abs(w.vx) > 24;
       });
-      if ((!moving && this.airborneClear()) || this.settleMax > 3.6) {
+      if ((!moving && this.airborneClear()) || (this.settleMax > 6 && !drowning)) {
         this.settleT -= dt;
-        if (this.settleT <= 0) this.nextTurn();
+        if (this.settleT <= 0) {
+          this.detonateLeftovers();
+          this.nextTurn();
+        }
       } else this.settleT = 0.28;
     }
   }
@@ -656,6 +670,14 @@ export class MinhocaGame {
       if (p.dropped < p.dropXs.length) return false;
     }
     return true;
+  }
+
+  private detonateLeftovers() {
+    if (!this.shots.length) return;
+    const leftover = this.shots.splice(0, this.shots.length);
+    for (const s of leftover) {
+      this.explode(s.x, Math.min(s.y, WATER_Y + 8), s.blast, s.dmg);
+    }
   }
 
   private afterSim() {
@@ -670,6 +692,12 @@ export class MinhocaGame {
     const right = keys.has("KeyD") || keys.has("ArrowRight") || this.walkPad > 0;
     const up = keys.has("KeyW") || keys.has("ArrowUp") || this.aimPad > 0;
     const down = keys.has("KeyS") || keys.has("ArrowDown") || this.aimPad < 0;
+    const firing = this.fireHeld || keys.has("Space") || this.pointerHeld;
+
+    if (!this.controlsArmed) {
+      if (!left && !right && !firing) this.controlsArmed = true;
+      else return;
+    }
 
     this.pointerAimT = Math.max(0, this.pointerAimT - dt);
 
@@ -696,6 +724,10 @@ export class MinhocaGame {
     if (this.phase === "charge") {
       this.power = clamp(this.power + dt * 0.85, 0.18, 1);
       w.anim = "aim";
+      if (this.power >= 0.995) {
+        this.releaseFire();
+        return;
+      }
       const holding = this.fireHeld || keys.has("Space") || this.pointerHeld;
       if (!holding) this.releaseFire();
       return;
@@ -869,6 +901,7 @@ export class MinhocaGame {
     const w = this.active();
     if (!w || this.phase !== "turn") return;
     if (this.inputLock > 0) return;
+    if (!this.controlsArmed) return;
     if (this.ai.on) return;
     const def = weaponDef(this.weapon);
     if (this.ammo[this.team][this.weapon] === 0) return;
@@ -1153,9 +1186,19 @@ export class MinhocaGame {
       guard++;
     }
     if (this.bodyHits(w.x, w.y)) {
+      for (const dx of [-8, 8, -16, 16, -24, 24]) {
+        const nx = clamp(w.x + dx, 18, WORLD_W - 18);
+        if (!this.bodyHits(nx, w.y)) {
+          w.x = nx;
+          break;
+        }
+      }
+    }
+    if (this.bodyHits(w.x, w.y)) {
       const sy = this.terrain.surfaceY(w.x);
       if (sy > 0) w.y = sy - 1;
     }
+    w.x = clamp(w.x, 18, WORLD_W - 18);
   }
 
   private stepWorms(dt: number, canControl: boolean) {
@@ -1208,8 +1251,12 @@ export class MinhocaGame {
             w.y -= w.vy * h;
             w.vy *= 0.2;
           }
-          if (w.vy > 0 && this.feetGround(w.x, w.y)) {
+          if (w.vy > 0 && (this.feetGround(w.x, w.y) || this.bodyHits(w.x, w.y))) {
+            if (this.bodyHits(w.x, w.y)) w.y -= w.vy * h;
             this.unstick(w);
+            w.grounded = true;
+            w.vy = 0;
+            w.vx *= 0.4;
             break;
           }
         }
@@ -1219,13 +1266,25 @@ export class MinhocaGame {
         w.drownT += dt;
         w.vy = Math.min(w.vy, 48);
         w.vx *= 0.9;
+        if (w.y > WORLD_H + 40) w.y = WORLD_H + 40;
         if (Math.random() < 0.07) this.splash(w.x, WATER_Y);
-        while (w.drownT >= 0.24) {
-          w.drownT -= 0.24;
-          this.hurt(w, 10, 0, 0, true);
+        if (w.y > WATER_Y + 90) {
+          this.kill(w);
+        } else {
+          while (w.drownT >= 0.24) {
+            w.drownT -= 0.24;
+            this.hurt(w, 10, 0, 0, true);
+          }
         }
       } else {
         w.drownT = 0;
+      }
+      if (!Number.isFinite(w.x) || !Number.isFinite(w.y)) {
+        const sy = this.terrain.surfaceY(WORLD_W * 0.5);
+        w.x = WORLD_W * 0.5;
+        w.y = sy > 0 ? sy - 1 : WATER_Y - 80;
+        w.vx = 0;
+        w.vy = 0;
       }
       if (w.hp <= 0 && !w.dead) this.kill(w);
       if (canControl && w !== this.active() && w.grounded) {
@@ -1372,7 +1431,12 @@ export class MinhocaGame {
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const d = Math.hypot(dx, dy);
-        if (d >= 16 || d < 0.01) continue;
+        if (d >= 16) continue;
+        if (d < 0.01) {
+          a.x = clamp(a.x - 3, 18, WORLD_W - 18);
+          b.x = clamp(b.x + 3, 18, WORLD_W - 18);
+          continue;
+        }
         const push = (16 - d) * 0.45;
         const nx = dx / d;
         a.x -= nx * push;
@@ -1530,12 +1594,17 @@ export class MinhocaGame {
 
   private refreshTouch() {
     const q = new URLSearchParams(location.search);
-    const portrait = window.innerHeight > window.innerWidth * 1.05;
-    const coarse = window.matchMedia("(pointer: coarse)").matches;
-    const points = navigator.maxTouchPoints > 0;
-    const narrow = Math.min(window.innerWidth, window.innerHeight) < 820;
-    const mobileUa = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    this.touch = q.get("touch") === "1" || coarse || points || portrait || narrow || mobileUa;
+    const force = q.get("touch");
+    if (force === "1") {
+      this.touch = true;
+    } else if (force === "0") {
+      this.touch = false;
+    } else {
+      const coarse = window.matchMedia("(pointer: coarse)").matches;
+      const mobileUa = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const tablet = navigator.maxTouchPoints > 1 && window.matchMedia("(pointer: coarse)").matches;
+      this.touch = coarse || mobileUa || tablet;
+    }
     this.hudFire = this.touch;
   }
 
@@ -1614,6 +1683,11 @@ export class MinhocaGame {
       const p = this.planes[0];
       if (s) this.lookAt(s.x, s.y);
       else if (p) this.lookAt(p.x, p.y + 80);
+    } else if (this.phase === "settle") {
+      const drowning = this.worms.find((w) => !w.dead && w.y - 4 > WATER_Y);
+      const falling = this.worms.find((w) => !w.dead && !w.grounded && Math.abs(w.vy) > 80);
+      const focus = drowning ?? falling ?? this.active();
+      if (focus) this.lookAt(focus.x, focus.y);
     } else if (!this.pinching) {
       const w = this.active();
       if (w) {
@@ -2129,6 +2203,25 @@ export class MinhocaGame {
     this.canvas.addEventListener("pointerup", this.onPtrUp);
     this.canvas.addEventListener("pointercancel", this.onPtrUp);
     this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    this.canvas.addEventListener("contextmenu", this.onContext);
+  }
+
+  private onContext = (e: Event) => {
+    e.preventDefault();
+  };
+
+  private armControls() {
+    const keys = this.held();
+    const holding =
+      keys.has("Space") ||
+      keys.has("KeyA") ||
+      keys.has("KeyD") ||
+      keys.has("ArrowLeft") ||
+      keys.has("ArrowRight") ||
+      this.walkPad !== 0 ||
+      this.fireHeld ||
+      this.pointerHeld;
+    this.controlsArmed = !holding;
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -2391,19 +2484,31 @@ export class MinhocaGame {
       muted: this.muted,
       touch: this.touch,
       wide: this.landscape(),
-      hpA: this.worms.filter((w) => w.team === 0).map((w) => w.hp),
-      hpB: this.worms.filter((w) => w.team === 1).map((w) => w.hp),
+      hpA: this.teamHp(0),
+      hpB: this.teamHp(1),
       namesA: [...NAMES_A],
       namesB: [...NAMES_B],
       charging: this.phase === "charge",
       power: this.power,
       canAct: this.screen === "play" && !this.ai.on && this.phase === "turn",
+      cpu: this.ai.on,
+      showBanner: this.bannerT > 0 && this.screen === "play",
     };
+  }
+
+  private teamHp(team: Team): number[] {
+    const out = [0, 0, 0, 0];
+    for (const w of this.worms) {
+      if (w.team !== team) continue;
+      out[w.id % 4] = Math.max(0, w.hp);
+    }
+    if (this.worms.length === 0) return [100, 100, 100, 100];
+    return out;
   }
 
   private emit(force: boolean) {
     const snap = this.snapshot();
-    const key = `${snap.screen}|${snap.phase}|${snap.team}|${snap.weapon}|${snap.timer | 0}|${snap.loading}|${snap.winner}|${snap.hpA}|${snap.hpB}|${snap.charging}|${snap.wide}|${snap.touch}`;
+    const key = `${snap.screen}|${snap.phase}|${snap.team}|${snap.weapon}|${snap.timer | 0}|${snap.loading}|${snap.winner}|${snap.hpA}|${snap.hpB}|${snap.charging}|${snap.wide}|${snap.touch}|${snap.showBanner}|${snap.cpu}|${snap.muted}|${snap.banner}`;
     if (!force && key === this.lastUi) return;
     this.lastUi = key;
     this.onUi(snap);
